@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle2 } from 'lucide-react';
@@ -7,21 +7,26 @@ import { DriveField } from '../components/DriveField';
 import { PrimaryAction } from '../components/PrimaryAction';
 import { VehicleRegistrationForm } from '../components/VehicleRegistrationForm';
 import { VehicleTelemetrySection } from '../components/VehicleTelemetrySection';
+import { VehicleAlertModal } from '../components/VehicleAlertModal';
 import { PageTransition } from '../components/PageTransition';
 import {
   getVehicles,
   getActiveVehicle,
   setActiveVehicleId,
   getVehicleSignals,
+  getVehicleAbnormalConditions,
+  isAlertDismissed,
+  dismissAlert,
 } from '../services/vehicleStorage';
 
 /**
- * HomePage: The DriveSense Home Experience.
+ * HomePage: The DriveSense Home Experience with Smart Threshold Alerting.
  *
- * Visual Structure:
- * 1. Header: DriveSense Logo | Overview Tyres Battery Fluids Temperature Motion | Active Vehicle Switcher
- * 2. Active Vehicle Identity Block (Active Vehicle label, Name, Reg Number details, Greeting)
- * 3. Selected Information Stage (Overview / Tyres / Battery / Fluids / Temperature / Motion)
+ * User Flow:
+ * 1. Header: DriveSense Logo | Tabs | Notification Bell (Active Alerts Count) | Active Vehicle Switcher | Profile
+ * 2. Active Vehicle Identity Block
+ * 3. Smart Alert Overlay (Checks active vehicle on mount & vehicle switch; dismissible per session)
+ * 4. Selected Information Stage (Overview / Tyres / Battery / Fluids / Temperature / Motion)
  */
 export const HomePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -31,6 +36,11 @@ export const HomePage = () => {
   const [newlyAddedVehicle, setNewlyAddedVehicle] = useState(null);
   const [isAdditionalFlow, setIsAdditionalFlow] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
+
+  // Smart threshold alert modal state
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+  const [activeAlertModal, setActiveAlertModal] = useState(null);
+  const lastCheckedVehicleRef = useRef(null);
 
   // Sync data from storage
   const syncVehicleState = () => {
@@ -55,6 +65,50 @@ export const HomePage = () => {
     syncVehicleState();
   }, [searchParams]);
 
+  // Compute signals & abnormal conditions for currently active vehicle
+  const currentSignals = activeVehicle ? getVehicleSignals(activeVehicle.id) : null;
+  const abnormalConditions = activeVehicle && currentSignals
+    ? getVehicleAbnormalConditions(activeVehicle.id, currentSignals)
+    : [];
+
+  // Check and trigger smart alert modal ONLY on mount or when active vehicle changes
+  useEffect(() => {
+    if (mode === 'active' && activeVehicle && currentSignals) {
+      if (lastCheckedVehicleRef.current !== activeVehicle.id) {
+        lastCheckedVehicleRef.current = activeVehicle.id;
+
+        // Check if there is an undismissed abnormal condition for this vehicle
+        const undismissed = abnormalConditions.filter(
+          (condition) => !isAlertDismissed(activeVehicle.id, condition.id)
+        );
+
+        if (undismissed.length > 0) {
+          setActiveAlertModal(undismissed[0]); // Prioritized (Critical > Attention)
+          setIsAlertModalOpen(true);
+        } else {
+          setIsAlertModalOpen(false);
+          setActiveAlertModal(null);
+        }
+      }
+    }
+  }, [mode, activeVehicle?.id, abnormalConditions.length]);
+
+  // Alert modal actions
+  const handleDismissAlert = () => {
+    if (activeVehicle && activeAlertModal) {
+      dismissAlert(activeVehicle.id, activeAlertModal.id);
+    }
+    setIsAlertModalOpen(false);
+  };
+
+  const handleViewAlertTab = (tabId) => {
+    if (activeVehicle && activeAlertModal) {
+      dismissAlert(activeVehicle.id, activeAlertModal.id);
+    }
+    setIsAlertModalOpen(false);
+    setActiveTab(tabId);
+  };
+
   // Handle successful vehicle addition
   const handleRegistrationSuccess = (newVehicle, isAdditional) => {
     setNewlyAddedVehicle(newVehicle);
@@ -74,6 +128,7 @@ export const HomePage = () => {
     syncVehicleState();
     setMode('active');
     setActiveTab('overview');
+    lastCheckedVehicleRef.current = null; // trigger re-check for new vehicle
   };
 
   // Cancel registration and return
@@ -90,19 +145,33 @@ export const HomePage = () => {
   return (
     <PageTransition>
       <div className="min-h-screen w-full bg-[#FAFCFB] open-canvas-gradient flex flex-col justify-between py-6 sm:py-10 px-4 sm:px-10 lg:px-16 relative overflow-hidden">
-        {/* Top Navigation Bar with Integrated Vehicle Tabs in Vehicle Context */}
+        {/* Top Navigation Bar with Integrated Vehicle Tabs & Alert Notification Indicator */}
         <AppHeader
           isVehicleContext={isVehicleContext}
           activeTab={activeTab}
+          abnormalConditions={abnormalConditions}
+          vehicles={vehicles}
+          activeVehicle={activeVehicle}
           onSelectTab={setActiveTab}
           onVehicleSwitch={(v) => {
+            setActiveVehicleId(v.id);
             setActiveVehicle(v);
             setMode('active');
+            lastCheckedVehicleRef.current = null; // trigger re-check for newly switched vehicle
           }}
           onAddNewVehicle={() => {
             setIsAdditionalFlow(true);
             setMode('register');
           }}
+        />
+
+        {/* Smart Threshold Alert Modal Overlay */}
+        <VehicleAlertModal
+          isOpen={isAlertModalOpen}
+          alert={activeAlertModal}
+          totalIssues={abnormalConditions.length}
+          onDismiss={handleDismissAlert}
+          onViewTab={handleViewAlertTab}
         />
 
         {/* Main Content Stage */}
@@ -255,9 +324,8 @@ export const HomePage = () => {
 
             {/* ========================================================================= */}
             {/* STATE 4: ACTIVE VEHICLE HOME VIEW                                         */}
-            {/* User Flow: Header Nav -> Active Vehicle Identity -> Selected Information */}
             {/* ========================================================================= */}
-            {mode === 'active' && activeVehicle && (
+            {mode === 'active' && activeVehicle && currentSignals && (
               <motion.div
                 key={`active-vehicle-${activeVehicle.id}`}
                 initial={{ opacity: 0, y: 10 }}
@@ -291,7 +359,7 @@ export const HomePage = () => {
 
                 {/* 2. Selected Vehicle Information Section */}
                 <VehicleTelemetrySection
-                  signals={getVehicleSignals(activeVehicle.id)}
+                  signals={currentSignals}
                   vehicleName={activeVehicle.nickname || `${activeVehicle.manufacturer} ${activeVehicle.model}`}
                   activeTab={activeTab}
                   onSelectTab={setActiveTab}

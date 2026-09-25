@@ -6,6 +6,8 @@ import { PasswordInput } from '../components/PasswordInput';
 import { PrimaryAction } from '../components/PrimaryAction';
 import { PageTransition } from '../components/PageTransition';
 
+import { saveUser } from '../services/vehicleStorage';
+
 /**
  * SignupPage: Open Canvas Experience for DriveSense.
  */
@@ -95,6 +97,14 @@ export const SignupPage = () => {
     }
 
     setIsLoading(true);
+
+    // Persist account information to drivesense:user
+    saveUser({
+      name: formData.fullName.trim(),
+      email: formData.email.trim(),
+      phone: formData.phone.trim(),
+      password: formData.password,
+    });
 
     // Safe frontend signup completion -> redirect to /home
     setTimeout(() => {

@@ -10,28 +10,39 @@ import {
   Shield,
   AlertTriangle,
   CheckCircle2,
+  ShieldAlert,
 } from 'lucide-react';
 import { SENSOR_COPY } from '../services/vehicleStorage';
 
 // ============================================================================
-// STATUS CHIP — Minimal visual badge for Normal / Stable / Attention
+// STATUS CHIP — 3-Tier Visual Badge (Normal / Attention / Critical)
 // ============================================================================
 export const StatusChip = ({ status = 'Normal' }) => {
+  const isCritical = status === 'Critical';
   const isAttention = status === 'Attention';
+
+  if (isCritical) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold leading-none bg-[#FEF2F2] text-[#B91C1C] border border-[#EF4444]/30">
+        <ShieldAlert className="w-2.5 h-2.5 text-[#B91C1C]" />
+        Critical
+      </span>
+    );
+  }
+
+  if (isAttention) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold leading-none bg-[#FFF7ED] text-[#B45309] border border-[#F59E0B]/30">
+        <AlertTriangle className="w-2.5 h-2.5 text-[#B45309]" />
+        Attention
+      </span>
+    );
+  }
+
   return (
-    <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold leading-none ${
-        isAttention
-          ? 'bg-[#FFF7ED] text-[#B45309] border border-[#F59E0B]/30'
-          : 'bg-[#E8F5F1] text-[#176B5B] border border-[#176B5B]/20'
-      }`}
-    >
-      {isAttention ? (
-        <AlertTriangle className="w-2.5 h-2.5" />
-      ) : (
-        <CheckCircle2 className="w-2.5 h-2.5" />
-      )}
-      {status}
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold leading-none bg-[#E8F5F1] text-[#176B5B] border border-[#176B5B]/20">
+      <CheckCircle2 className="w-2.5 h-2.5 text-[#3C9A70]" />
+      {status === 'Stable' ? 'Stable' : 'Normal'}
     </span>
   );
 };
@@ -50,11 +61,14 @@ export const SubtleSuggestion = ({ sensorKey, status = 'Normal' }) => {
   );
 };
 
-const tyreStatusColour = (status) =>
-  status === 'Attention' ? '#F59E0B' : '#176B5B';
+const getStatusBorderColor = (status) => {
+  if (status === 'Critical') return '#EF4444';
+  if (status === 'Attention') return '#F59E0B';
+  return '#176B5B';
+};
 
 // ============================================================================
-// ABSTRACT CHASSIS VISUAL — Overhead TPMS schematic with live node highlights
+// ABSTRACT CHASSIS VISUAL — Overhead TPMS schematic with per-tyre status colors
 // ============================================================================
 export const AbstractChassisVisual = ({ tyreData = {} }) => {
   const shouldReduceMotion = useReducedMotion();
@@ -65,10 +79,10 @@ export const AbstractChassisVisual = ({ tyreData = {} }) => {
   const rrStatus = tyreData.statusRR || 'Normal';
 
   const tyreRects = [
-    { x: 42, y: 40, status: flStatus },
-    { x: 172, y: 40, status: frStatus },
-    { x: 42, y: 115, status: rlStatus },
-    { x: 172, y: 115, status: rrStatus },
+    { label: 'FL', x: 42, y: 40, status: flStatus },
+    { label: 'FR', x: 172, y: 40, status: frStatus },
+    { label: 'RL', x: 42, y: 115, status: rlStatus },
+    { label: 'RR', x: 172, y: 115, status: rrStatus },
   ];
 
   return (
@@ -111,20 +125,23 @@ export const AbstractChassisVisual = ({ tyreData = {} }) => {
           />
         )}
 
-        {/* Tyre Elements */}
-        {tyreRects.map((t, i) => (
-          <g key={i} transform={`translate(${t.x}, ${t.y})`}>
-            <rect
-              width="26"
-              height="30"
-              rx="5"
-              fill="#FFFFFF"
-              stroke={tyreStatusColour(t.status)}
-              strokeWidth="2"
-            />
-            <circle cx="13" cy="15" r="2" fill={tyreStatusColour(t.status)} />
-          </g>
-        ))}
+        {/* Individual Tyre Rectangles with status-coded stroke */}
+        {tyreRects.map((t, i) => {
+          const color = getStatusBorderColor(t.status);
+          return (
+            <g key={i} transform={`translate(${t.x}, ${t.y})`}>
+              <rect
+                width="26"
+                height="30"
+                rx="5"
+                fill="#FFFFFF"
+                stroke={color}
+                strokeWidth={t.status === 'Normal' ? '1.8' : '2.5'}
+              />
+              <circle cx="13" cy="15" r="2" fill={color} />
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
@@ -133,24 +150,30 @@ export const AbstractChassisVisual = ({ tyreData = {} }) => {
 // ============================================================================
 // TYRE VALUE CARD
 // ============================================================================
-export const TyreCard = ({ label, value, status = 'Normal' }) => (
-  <div
-    className={`space-y-0.5 border-l-2 pl-3 py-1.5 ${
-      status === 'Attention' ? 'border-[#F59E0B]' : 'border-[#176B5B]'
-    }`}
-  >
-    <span className="text-[11px] font-semibold text-[#66736F] uppercase tracking-wider block">
-      {label}
-    </span>
-    <div className="text-2xl sm:text-3xl font-extrabold text-[#1F2927] tracking-tight">
-      {value} <span className="text-xs font-normal text-[#66736F]">PSI</span>
+export const TyreCard = ({ label, value, status = 'Normal' }) => {
+  const isCritical = status === 'Critical';
+  const isAttention = status === 'Attention';
+
+  let borderClass = 'border-[#176B5B]';
+  if (isCritical) borderClass = 'border-[#EF4444]';
+  else if (isAttention) borderClass = 'border-[#F59E0B]';
+
+  return (
+    <div className={`space-y-0.5 border-l-2 pl-3 py-1.5 ${borderClass}`}>
+      <span className="text-[11px] font-semibold text-[#66736F] uppercase tracking-wider block">
+        {label}
+      </span>
+      <div className="text-2xl sm:text-3xl font-extrabold text-[#1F2927] tracking-tight">
+        {value} <span className="text-xs font-normal text-[#66736F]">PSI</span>
+      </div>
+      <StatusChip status={status} />
     </div>
-    <StatusChip status={status} />
-  </div>
-);
+  );
+};
 
 // ============================================================================
-// 1. OVERVIEW TAB (Compact Rectangular Sections with Click-to-Tab)
+// 1. OVERVIEW TAB
+// Shows worst-case status on Tyres row & status-tinted subsystem cards
 // ============================================================================
 export const OverviewTab = ({ signals, onSelectTab }) => {
   const { tyrePressure, electrical, temperature, fluid, motion } = signals;
@@ -160,7 +183,7 @@ export const OverviewTab = ({ signals, onSelectTab }) => {
       id: 'tyres',
       icon: Gauge,
       name: 'Tyre Pressure',
-      reading: `${tyrePressure?.frontLeft || 33} PSI avg`,
+      reading: `${tyrePressure?.average || 33} PSI avg`,
       status: tyrePressure?.overallStatus || 'Normal',
       interpretation: SENSOR_COPY?.tyrePressure?.[tyrePressure?.overallStatus || 'Normal']?.explanation,
       suggestionKey: 'tyrePressure',
@@ -169,7 +192,7 @@ export const OverviewTab = ({ signals, onSelectTab }) => {
       id: 'battery',
       icon: Zap,
       name: 'Electrical System',
-      reading: electrical?.voltage || '12.9 V',
+      reading: electrical?.voltage || '12.8 V',
       status: electrical?.voltageStatus || 'Normal',
       interpretation: SENSOR_COPY?.voltage?.[electrical?.voltageStatus || 'Normal']?.explanation,
       suggestionKey: 'voltage',
@@ -197,8 +220,8 @@ export const OverviewTab = ({ signals, onSelectTab }) => {
       icon: Compass,
       name: 'Vehicle Motion',
       reading: motion?.motionState || 'Stable',
-      status: motion?.motionStatus === 'Stable' ? 'Normal' : 'Attention',
-      interpretation: SENSOR_COPY?.motion?.[motion?.motionStatus === 'Stable' ? 'Stable' : 'Attention']?.explanation,
+      status: motion?.motionStatus === 'Stable' ? 'Normal' : motion?.motionStatus,
+      interpretation: SENSOR_COPY?.motion?.[motion?.motionStatus === 'Stable' ? 'Stable' : motion?.motionStatus]?.explanation,
       suggestionKey: 'motion',
     },
   ];
@@ -208,6 +231,20 @@ export const OverviewTab = ({ signals, onSelectTab }) => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {sections.map((sec) => {
           const Icon = sec.icon;
+          const isCritical = sec.status === 'Critical';
+          const isAttention = sec.status === 'Attention';
+
+          let cardBorder = 'border-[#DCE7E3] hover:border-[#176B5B]/50';
+          let cardBg = 'bg-white hover:bg-[#FAFCFB]';
+
+          if (isCritical) {
+            cardBorder = 'border-[#EF4444]/40 hover:border-[#EF4444]';
+            cardBg = 'bg-[#FEF2F2]/30 hover:bg-[#FEF2F2]/50';
+          } else if (isAttention) {
+            cardBorder = 'border-[#F59E0B]/40 hover:border-[#F59E0B]';
+            cardBg = 'bg-[#FFF7ED]/30 hover:bg-[#FFF7ED]/50';
+          }
+
           return (
             <div
               key={sec.id}
@@ -220,13 +257,21 @@ export const OverviewTab = ({ signals, onSelectTab }) => {
                   onSelectTab && onSelectTab(sec.id);
                 }
               }}
-              className="group bg-white hover:bg-[#FAFCFB] border border-[#DCE7E3] hover:border-[#176B5B]/50 rounded-2xl p-5 transition-all cursor-pointer shadow-xs hover:shadow-sm flex flex-col justify-between"
+              className={`group border rounded-2xl p-5 transition-all cursor-pointer shadow-xs hover:shadow-sm flex flex-col justify-between ${cardBorder} ${cardBg}`}
             >
               <div className="space-y-3">
                 {/* Header: Icon + Name + Status */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-[#E8F5F1] flex items-center justify-center text-[#176B5B]">
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        isCritical
+                          ? 'bg-[#FEF2F2] text-[#B91C1C]'
+                          : isAttention
+                          ? 'bg-[#FFF7ED] text-[#B45309]'
+                          : 'bg-[#E8F5F1] text-[#176B5B]'
+                      }`}
+                    >
                       <Icon className="w-4 h-4" />
                     </div>
                     <h4 className="text-sm font-bold text-[#1F2927] group-hover:text-[#176B5B] transition-colors">
@@ -295,7 +340,13 @@ export const TyresTab = ({ tyrePressure }) => {
       </div>
 
       <div className="space-y-1 pt-1">
-        <p className="text-xs text-[#4A5A55] leading-relaxed">
+        <div className="flex items-center justify-between text-xs text-[#66736F]">
+          <span>Recommended safe range</span>
+          <span className="font-semibold text-[#1F2927] font-mono">
+            {tyrePressure.recommendedRange || '28 – 35 PSI'}
+          </span>
+        </div>
+        <p className="text-xs text-[#4A5A55] leading-relaxed pt-1">
           {SENSOR_COPY?.tyrePressure?.[overallStatus]?.explanation}
         </p>
         <SubtleSuggestion sensorKey="tyrePressure" status={overallStatus} />
@@ -332,8 +383,10 @@ export const BatteryTab = ({ electrical }) => {
             {electrical.voltage}
           </div>
           <div className="pt-2 text-xs text-[#66736F] font-mono">
-            <span className="block text-[11px] uppercase font-semibold text-[#176B5B]">Operating range</span>
-            12.0 V — 14.4 V
+            <span className="block text-[11px] uppercase font-semibold text-[#176B5B]">
+              Recommended range
+            </span>
+            {electrical.recommendedRange || '12.0 – 14.4 V'}
           </div>
         </div>
 
@@ -366,6 +419,13 @@ export const BatteryTab = ({ electrical }) => {
 // 4. FLUIDS TAB
 // ============================================================================
 export const FluidsTab = ({ fluid }) => {
+  const isCritical = fluid.fluidStatus === 'Critical';
+  const isAttention = fluid.fluidStatus === 'Attention';
+
+  let barColor = 'bg-[#176B5B]';
+  if (isCritical) barColor = 'bg-[#EF4444]';
+  else if (isAttention) barColor = 'bg-[#F59E0B]';
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 text-left">
       <div className="flex items-baseline justify-between border-b border-[#DCE7E3] pb-3">
@@ -393,9 +453,7 @@ export const FluidsTab = ({ fluid }) => {
         <div className="space-y-2">
           <div className="w-full h-2.5 bg-[#DCE7E3] rounded-full overflow-hidden">
             <motion.div
-              className={`h-full rounded-full ${
-                fluid.fluidStatus === 'Attention' ? 'bg-[#F59E0B]' : 'bg-[#176B5B]'
-              }`}
+              className={`h-full rounded-full ${barColor}`}
               initial={{ width: 0 }}
               animate={{ width: `${Math.min(100, fluid.numericLevel)}%` }}
               transition={{ duration: 1, ease: 'easeOut' }}
@@ -403,7 +461,7 @@ export const FluidsTab = ({ fluid }) => {
           </div>
           <div className="flex justify-between text-xs text-[#66736F] font-mono">
             <span>0% Min</span>
-            <span>20% Caution Threshold</span>
+            <span>20% Caution Boundary</span>
             <span>100% Full</span>
           </div>
         </div>
@@ -423,6 +481,13 @@ export const FluidsTab = ({ fluid }) => {
 // 5. TEMPERATURE TAB
 // ============================================================================
 export const TemperatureTab = ({ temperature }) => {
+  const isCritical = temperature.tempStatus === 'Critical';
+  const isAttention = temperature.tempStatus === 'Attention';
+
+  let barColor = 'bg-[#176B5B]';
+  if (isCritical) barColor = 'bg-[#EF4444]';
+  else if (isAttention) barColor = 'bg-[#F59E0B]';
+
   return (
     <div className="max-w-2xl mx-auto space-y-6 text-left">
       <div className="flex items-baseline justify-between border-b border-[#DCE7E3] pb-3">
@@ -450,9 +515,7 @@ export const TemperatureTab = ({ temperature }) => {
         <div className="space-y-2">
           <div className="w-full h-2.5 bg-[#DCE7E3] rounded-full overflow-hidden">
             <motion.div
-              className={`h-full rounded-full ${
-                temperature.tempStatus === 'Attention' ? 'bg-[#F59E0B]' : 'bg-[#176B5B]'
-              }`}
+              className={`h-full rounded-full ${barColor}`}
               initial={{ width: 0 }}
               animate={{ width: `${Math.min(100, Math.max(10, (temperature.numericValue / 90) * 100))}%` }}
               transition={{ duration: 1, ease: 'easeOut' }}
@@ -460,7 +523,8 @@ export const TemperatureTab = ({ temperature }) => {
           </div>
           <div className="flex justify-between text-xs text-[#66736F] font-mono">
             <span>20 °C</span>
-            <span>45 °C Caution Threshold</span>
+            <span>45 °C Caution</span>
+            <span>55 °C Critical</span>
             <span>90 °C Max</span>
           </div>
         </div>
@@ -491,7 +555,7 @@ export const MotionTab = ({ motion: motionData }) => {
             Vehicle Motion
           </h3>
         </div>
-        <StatusChip status={motionData.motionStatus === 'Stable' ? 'Normal' : 'Attention'} />
+        <StatusChip status={motionData.motionStatus === 'Stable' ? 'Normal' : motionData.motionStatus} />
       </div>
 
       <div className="bg-white border border-[#DCE7E3] rounded-2xl p-6 sm:p-8 space-y-6">
@@ -522,11 +586,11 @@ export const MotionTab = ({ motion: motionData }) => {
 
       <div className="space-y-1 pt-1">
         <p className="text-xs text-[#4A5A55] leading-relaxed">
-          {SENSOR_COPY?.motion?.[motionData.motionStatus === 'Stable' ? 'Stable' : 'Attention']?.explanation}
+          {SENSOR_COPY?.motion?.[motionData.motionStatus === 'Stable' ? 'Stable' : motionData.motionStatus]?.explanation}
         </p>
         <SubtleSuggestion
           sensorKey="motion"
-          status={motionData.motionStatus === 'Stable' ? 'Stable' : 'Attention'}
+          status={motionData.motionStatus === 'Stable' ? 'Stable' : motionData.motionStatus}
         />
       </div>
     </div>
