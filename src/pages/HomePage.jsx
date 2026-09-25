@@ -1,26 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShieldCheck, Activity, Cpu, CheckCircle2, ArrowRight } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { AppHeader } from '../components/AppHeader';
 import { DriveField } from '../components/DriveField';
 import { PrimaryAction } from '../components/PrimaryAction';
 import { VehicleRegistrationForm } from '../components/VehicleRegistrationForm';
+import { VehicleTelemetrySection } from '../components/VehicleTelemetrySection';
 import { PageTransition } from '../components/PageTransition';
 import {
   getVehicles,
   getActiveVehicle,
   setActiveVehicleId,
+  getVehicleSignals,
 } from '../services/vehicleStorage';
 
 /**
  * HomePage: The DriveSense Home Experience.
  *
- * Handles 4 state-driven modes within /home:
- * 1. First-Time Welcome Invitation (0 vehicles registered)
- * 2. Inline Vehicle Registration Mode
- * 3. In-Place Success Confirmation State
- * 4. Active Vehicle Environment (Returning User / Active Vehicle View)
+ * Visual Structure:
+ * 1. Header: DriveSense Logo | Overview Tyres Battery Fluids Temperature Motion | Active Vehicle Switcher
+ * 2. Active Vehicle Identity Block (Active Vehicle label, Name, Reg Number details, Greeting)
+ * 3. Selected Information Stage (Overview / Tyres / Battery / Fluids / Temperature / Motion)
  */
 export const HomePage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -29,6 +30,7 @@ export const HomePage = () => {
   const [mode, setMode] = useState('loading'); // 'invitation' | 'register' | 'success' | 'active'
   const [newlyAddedVehicle, setNewlyAddedVehicle] = useState(null);
   const [isAdditionalFlow, setIsAdditionalFlow] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
 
   // Sync data from storage
   const syncVehicleState = () => {
@@ -58,7 +60,6 @@ export const HomePage = () => {
     setNewlyAddedVehicle(newVehicle);
     setIsAdditionalFlow(isAdditional);
     setMode('success');
-    // Clear setup query parameter
     if (searchParams.get('setup')) {
       searchParams.delete('setup');
       setSearchParams(searchParams, { replace: true });
@@ -72,6 +73,7 @@ export const HomePage = () => {
     }
     syncVehicleState();
     setMode('active');
+    setActiveTab('overview');
   };
 
   // Cancel registration and return
@@ -83,11 +85,16 @@ export const HomePage = () => {
     syncVehicleState();
   };
 
+  const isVehicleContext = mode === 'active' && !!activeVehicle;
+
   return (
     <PageTransition>
-      <div className="min-h-screen w-full bg-[#FAFCFB] open-canvas-gradient flex flex-col justify-between py-8 sm:py-12 px-6 sm:px-12 lg:px-20 relative overflow-hidden">
-        {/* Top Minimal Navigation */}
+      <div className="min-h-screen w-full bg-[#FAFCFB] open-canvas-gradient flex flex-col justify-between py-6 sm:py-10 px-4 sm:px-10 lg:px-16 relative overflow-hidden">
+        {/* Top Navigation Bar with Integrated Vehicle Tabs in Vehicle Context */}
         <AppHeader
+          isVehicleContext={isVehicleContext}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
           onVehicleSwitch={(v) => {
             setActiveVehicle(v);
             setMode('active');
@@ -99,7 +106,7 @@ export const HomePage = () => {
         />
 
         {/* Main Content Stage */}
-        <main className="w-full max-w-6xl mx-auto my-auto relative z-10 py-6 lg:py-10">
+        <main className="w-full max-w-6xl mx-auto my-auto relative z-10 py-4 lg:py-8">
           <AnimatePresence mode="wait">
             {/* ========================================================================= */}
             {/* STATE 1: FIRST-TIME WELCOME INVITATION (0 Vehicles)                       */}
@@ -173,7 +180,6 @@ export const HomePage = () => {
                       : 'Tell us a little about the vehicle you want to monitor. You can add more vehicles later.'}
                   </p>
 
-                  {/* Ambient mini Drive Field */}
                   <div className="pt-6 hidden lg:block opacity-60 pointer-events-none">
                     <DriveField variant="signup" />
                   </div>
@@ -238,7 +244,7 @@ export const HomePage = () => {
                     <button
                       type="button"
                       onClick={() => handleProceedToActive(false)}
-                      className="text-xs font-semibold text-[#66736F] hover:text-[#1F2927] py-2 px-1"
+                      className="text-xs font-semibold text-[#66736F] hover:text-[#1F2927] py-2 px-1 cursor-pointer"
                     >
                       Keep Current Active Vehicle
                     </button>
@@ -248,7 +254,8 @@ export const HomePage = () => {
             )}
 
             {/* ========================================================================= */}
-            {/* STATE 4: ACTIVE VEHICLE HOME VIEW (Returning User / Connected Vehicle)    */}
+            {/* STATE 4: ACTIVE VEHICLE HOME VIEW                                         */}
+            {/* User Flow: Header Nav -> Active Vehicle Identity -> Selected Information */}
             {/* ========================================================================= */}
             {mode === 'active' && activeVehicle && (
               <motion.div
@@ -257,16 +264,16 @@ export const HomePage = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                className="space-y-10 text-left"
+                className="space-y-8 text-left"
               >
-                {/* Greeting & Active Vehicle Identity */}
-                <div className="space-y-3">
+                {/* 1. Active Vehicle Identity Section */}
+                <div className="space-y-2 border-b border-[#DCE7E3] pb-5">
                   <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#176B5B]">
                     <span className="w-1.5 h-1.5 rounded-full bg-[#3C9A70]" />
                     <span>Active Vehicle</span>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2 border-b border-[#DCE7E3] pb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
                     <div>
                       <h1 className="text-3xl sm:text-5xl font-extrabold text-[#1F2927] tracking-tight">
                         {activeVehicle.nickname || `${activeVehicle.manufacturer} ${activeVehicle.model}`}
@@ -282,40 +289,13 @@ export const HomePage = () => {
                   </div>
                 </div>
 
-                {/* Environmental Visual Foundation: Future Hardware & Sensor Signal Area */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                  {/* Left: Future Signal Status Description */}
-                  <div className="lg:col-span-6 space-y-4 max-w-lg">
-                    <h3 className="text-xl sm:text-2xl font-bold text-[#1F2927] tracking-tight">
-                      Vehicle Signals &amp; Telemetry
-                    </h3>
-
-                    <p className="text-sm sm:text-base text-[#66736F] leading-relaxed">
-                      Your vehicle signals will appear here once your DriveSense hardware is connected. Everything is configured and ready for hardware synchronization.
-                    </p>
-
-                    {/* Architectural Feature Areas (Visual Foundation - No fake data) */}
-                    <div className="pt-2 space-y-2.5 text-xs text-[#66736F]">
-                      <div className="flex items-center gap-2.5 py-1.5 border-b border-[#DCE7E3]/60">
-                        <Activity className="w-4 h-4 text-[#176B5B]" />
-                        <span>Continuous electrical &amp; battery monitoring</span>
-                      </div>
-                      <div className="flex items-center gap-2.5 py-1.5 border-b border-[#DCE7E3]/60">
-                        <ShieldCheck className="w-4 h-4 text-[#176B5B]" />
-                        <span>Tyre pressure &amp; thermal telemetry</span>
-                      </div>
-                      <div className="flex items-center gap-2.5 py-1.5 border-b border-[#DCE7E3]/60">
-                        <Cpu className="w-4 h-4 text-[#176B5B]" />
-                        <span>IMU vehicle motion &amp; kinematics</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: Environmental Drive Field Graphic */}
-                  <div className="lg:col-span-6 flex items-center justify-center opacity-85">
-                    <DriveField variant="login" />
-                  </div>
-                </div>
+                {/* 2. Selected Vehicle Information Section */}
+                <VehicleTelemetrySection
+                  signals={getVehicleSignals(activeVehicle.id)}
+                  vehicleName={activeVehicle.nickname || `${activeVehicle.manufacturer} ${activeVehicle.model}`}
+                  activeTab={activeTab}
+                  onSelectTab={setActiveTab}
+                />
               </motion.div>
             )}
           </AnimatePresence>
